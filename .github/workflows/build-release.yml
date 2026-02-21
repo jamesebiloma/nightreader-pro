@@ -21,6 +21,9 @@ jobs:
 
       - name: Install dependencies
         run: flutter pub get
+        
+      - name: Create platform files  
+        run: flutter create --platforms=windows .
 
       - name: Enable Windows desktop
         run: flutter config --enable-windows-desktop
@@ -59,6 +62,9 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
+      - name: Create platform files  
+        run: flutter create --platforms=Linux .
+
       - name: Enable Linux desktop
         run: flutter config --enable-linux-desktop
 
@@ -96,6 +102,9 @@ jobs:
 
       - name: Install dependencies
         run: flutter pub get
+
+      - name: Create platform files  
+        run: flutter create --platforms=android .
 
       - name: Build Android APK (split per ABI)
         run: flutter build apk --release --split-per-abi
