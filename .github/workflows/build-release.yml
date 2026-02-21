@@ -1,0 +1,170 @@
+name: Build Multi-Platform Releases
+
+on:
+  push:
+    tags:
+      - 'v*'  # Triggers on version tags like v1.0.0
+  workflow_dispatch:  # Allows manual trigger from GitHub UI
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.27.3'
+          channel: 'stable'
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Enable Windows desktop
+        run: flutter config --enable-windows-desktop
+
+      - name: Build Windows release
+        run: flutter build windows --release
+
+      - name: Create Windows ZIP
+        run: |
+          cd build/windows/x64/runner/Release
+          Compress-Archive -Path * -DestinationPath ../../../../../NightReaderPro-Windows-x64.zip
+
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-release
+          path: NightReaderPro-Windows-x64.zip
+
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.27.3'
+          channel: 'stable'
+
+      - name: Install Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev lld
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Enable Linux desktop
+        run: flutter config --enable-linux-desktop
+
+      - name: Build Linux release
+        run: flutter build linux --release
+
+      - name: Create Linux tarball
+        run: |
+          cd build/linux/x64/release/bundle
+          tar -czf ../../../../../NightReaderPro-Linux-x64.tar.gz *
+
+      - name: Upload Linux artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-release
+          path: NightReaderPro-Linux-x64.tar.gz
+
+  build-android:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.27.3'
+          channel: 'stable'
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Build Android APK (split per ABI)
+        run: flutter build apk --release --split-per-abi
+
+      - name: Build Android App Bundle
+        run: flutter build appbundle --release
+
+      - name: Upload APK artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-apks
+          path: |
+            build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk
+            build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
+            build/app/outputs/flutter-apk/app-x86_64-release.apk
+
+      - name: Upload App Bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-bundle
+          path: build/app/outputs/bundle/release/app-release.aab
+
+  create-release:
+    needs: [build-windows, build-linux, build-android]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            artifacts/windows-release/NightReaderPro-Windows-x64.zip
+            artifacts/linux-release/NightReaderPro-Linux-x64.tar.gz
+            artifacts/android-apks/*.apk
+            artifacts/android-bundle/*.aab
+          body: |
+            # 🌙 NightReader Pro Release
+            
+            ## Downloads
+            
+            ### Windows
+            - **NightReaderPro-Windows-x64.zip** - Extract and run `nightreader_pro.exe`
+            
+            ### Linux
+            - **NightReaderPro-Linux-x64.tar.gz** - Extract and run `nightreader_pro`
+            
+            ### Android
+            - **app-arm64-v8a-release.apk** - For most modern devices (2018+) ⭐ Recommended
+            - **app-armeabi-v7a-release.apk** - For older 32-bit devices
+            - **app-x86_64-release.apk** - For x86 devices (rare)
+            - **app-release.aab** - For uploading to Google Play Store
+            
+            ## Features
+            - 🌓 4 specialized dark modes
+            - 📝 Professional annotation tools
+            - 🎨 Customizable reading experience
+            - ⚡ Fast and lightweight
+            
+            ## Installation
+            
+            **Windows:** Extract ZIP, double-click `nightreader_pro.exe`  
+            **Linux:** Extract tarball, run `./nightreader_pro`  
+            **Android:** Install APK (enable "Unknown Sources")
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
